@@ -14440,6 +14440,9 @@ var checkControllerPresentAndSetup = trackedControlsUtils.checkControllerPresent
 var LEFT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/left.glb";
 var RIGHT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/right.glb";
 var HAND_GESTURE_DATA = __webpack_require__(/*! ../../HandGestureData_Clean.json */ "./HandGestureData_Clean.json");
+const {
+  default: THREE
+} = __webpack_require__(/*! ../lib/three.module */ "./src/lib/three.module.js");
 var JOINTS = ["wrist", "thumb-metacarpal", "thumb-phalanx-proximal", "thumb-phalanx-distal", "thumb-tip", "index-finger-metacarpal", "index-finger-phalanx-proximal", "index-finger-phalanx-intermediate", "index-finger-phalanx-distal", "index-finger-tip", "middle-finger-metacarpal", "middle-finger-phalanx-proximal", "middle-finger-phalanx-intermediate", "middle-finger-phalanx-distal", "middle-finger-tip", "ring-finger-metacarpal", "ring-finger-phalanx-proximal", "ring-finger-phalanx-intermediate", "ring-finger-phalanx-distal", "ring-finger-tip", "pinky-finger-metacarpal", "pinky-finger-phalanx-proximal", "pinky-finger-phalanx-intermediate", "pinky-finger-phalanx-distal", "pinky-finger-tip"];
 var PINCH_START_DISTANCE = 0.015;
 var PINCH_END_DISTANCE = 0.03;
@@ -14674,14 +14677,14 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
     };
   }(),
   detectHandGesture: function () {
-    var wristPosition = new THREE.Vector3();
-    var thumbTipPosition = new THREE.Vector3();
-    var middleTipPosition = new THREE.Vector3();
-    var ringTipPosition = new THREE.Vector3();
-    var pinkyTipPosition = new THREE.Vector3();
+    var wristPositionGesture = new THREE.Vector3();
+    var indexTipPositionGesture = new THREE.Vector3();
+    var thumbTipPositionGesture = new THREE.Vector3();
+    var middleTipPositionGesture = new THREE.Vector3();
+    var ringTipPositionGesture = new THREE.Vector3();
+    var pinkyTipPositionGesture = new THREE.Vector3();
     return function () {
       var frame = this.el.sceneEl.frame;
-      var indexTipPosition = this.indexTipPosition;
       var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
       var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
       var referenceSpace = this.referenceSpace || trackedControlsWebXR.system.referenceSpace;
@@ -14703,17 +14706,17 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
       if (!wristPose || !thumbTipPose || !indexTipPose || !middleTipPose || !ringTipPose || !pinkyTipPose) {
         return;
       }
-      wristPosition.copy(wristPose.transform.position);
-      thumbTipPosition.copy(thumbTipPose.transform.position);
-      indexTipPosition.copy(indexTipPose.transform.position);
-      middleTipPosition.copy(middleTipPose.transform.position);
-      ringTipPosition.copy(ringTipPose.transform.position);
-      pinkyTipPosition.copy(pinkyTipPose.transform.position);
-      var thumbDistanceToWrist = thumbTipPosition.distanceTo(wristPosition);
-      var indexDistanceToWrist = indexTipPosition.distanceTo(wristPosition);
-      var middleDistanceToWrist = middleTipPosition.distanceTo(wristPosition);
-      var ringDistanceToWrist = ringTipPosition.distanceTo(wristPosition);
-      var pinkyDistanceToWrist = pinkyTipPosition.distanceTo(wristPosition);
+      wristPositionGesture.copy(wristPose.transform.position);
+      thumbTipPositionGesture.copy(thumbTipPose.transform.position);
+      indexTipPositionGesture.copy(indexTipPose.transform.position);
+      middleTipPositionGesture.copy(middleTipPose.transform.position);
+      ringTipPositionGesture.copy(ringTipPose.transform.position);
+      pinkyTipPositionGesture.copy(pinkyTipPose.transform.position);
+      var thumbDistanceToWrist = thumbTipPositionGesture.distanceTo(wristPositionGesture);
+      var indexDistanceToWrist = indexTipPositionGesture.distanceTo(wristPositionGesture);
+      var middleDistanceToWrist = middleTipPositionGesture.distanceTo(wristPositionGesture);
+      var ringDistanceToWrist = ringTipPositionGesture.distanceTo(wristPositionGesture);
+      var pinkyDistanceToWrist = pinkyTipPositionGesture.distanceTo(wristPositionGesture);
       var gestureCounter = 0;
 
       // get gesture values from source
@@ -14733,7 +14736,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
         if (thumbDifference <= GESTURE_THRESHOLD_MAX && thumbDifference >= GESTURE_THRESHOLD_MIN && indexDifference <= GESTURE_THRESHOLD_MAX && indexDifference >= GESTURE_THRESHOLD_MIN && middleDifference <= GESTURE_THRESHOLD_MAX && middleDifference >= GESTURE_THRESHOLD_MIN && ringDifference <= GESTURE_THRESHOLD_MAX && ringDifference >= GESTURE_THRESHOLD_MIN && pinkyDifference <= GESTURE_THRESHOLD_MAX && pinkyDifference >= GESTURE_THRESHOLD_MIN && this.isGestureFound[gestureCounter] === false) {
           this.isGestureFound[gestureCounter] = true;
           this.gestureEventDetail.gestureName = gesture.Name;
-          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
           this.gestureEventDetail.position.y += 1.5;
           this.gestureEventDetail.hand = this.data.hand;
           this.el.emit("gesturestarted", this.gestureEventDetail);
@@ -14744,7 +14747,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
         if ((thumbDifference > GESTURE_THRESHOLD_MAX || thumbDifference < GESTURE_THRESHOLD_MIN || indexDifference > GESTURE_THRESHOLD_MAX || indexDifference < GESTURE_THRESHOLD_MIN || middleDifference > GESTURE_THRESHOLD_MAX || middleDifference < GESTURE_THRESHOLD_MIN || ringDifference > GESTURE_THRESHOLD_MAX || ringDifference < GESTURE_THRESHOLD_MIN || pinkyDifference > GESTURE_THRESHOLD_MAX || pinkyDifference < GESTURE_THRESHOLD_MIN) && this.isGestureFound[gestureCounter] === true) {
           this.isGestureFound[gestureCounter] = false;
           this.gestureEventDetail.gestureName = gesture.Name;
-          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
           this.gestureEventDetail.position.y += 1.5;
           this.gestureEventDetail.hand = this.data.hand;
           this.el.emit("gestureended", this.gestureEventDetail);
@@ -14753,7 +14756,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
 
         if (this.isGestureFound[gestureCounter]) {
           this.gestureEventDetail.gestureName = gesture.Name;
-          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
           this.gestureEventDetail.position.y += 1.5;
           this.gestureEventDetail.hand = this.data.hand;
           this.el.emit("gesturemoved", this.gestureEventDetail);
@@ -30314,7 +30317,7 @@ __webpack_require__(/*! ./core/a-mixin */ "./src/core/a-mixin.js");
 // Extras.
 __webpack_require__(/*! ./extras/components/ */ "./src/extras/components/index.js");
 __webpack_require__(/*! ./extras/primitives/ */ "./src/extras/primitives/index.js");
-console.log('A-Frame Version: 1.4.1 (Date 2023-02-12, Commit #789f6553)');
+console.log('A-Frame Version: 1.4.1 (Date 2023-02-12, Commit #770397e0)');
 console.log('THREE Version (https://github.com/supermedium/three.js):', pkg.dependencies['super-three']);
 console.log('WebVR Polyfill Version:', pkg.dependencies['webvr-polyfill']);
 module.exports = window.AFRAME = {
