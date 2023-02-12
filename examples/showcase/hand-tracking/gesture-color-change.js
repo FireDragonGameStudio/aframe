@@ -18,7 +18,6 @@ AFRAME.registerComponent("gesture-color-change", {
     },
 
     onGestureStarted: function (evt) {
-        console.log("GestureStart recognized!", evt.detail);
         if (evt.detail.gestureName == "Grip") {
             if (evt.detail.hand == "left") {
                 this.leftCylinderEl.setAttribute("material", "color", "lime");

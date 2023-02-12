@@ -8,6 +8,7 @@ var checkControllerPresentAndSetup = trackedControlsUtils.checkControllerPresent
 var LEFT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/left.glb";
 var RIGHT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/right.glb";
 var HAND_GESTURE_DATA = require("../../HandGestureData_Clean.json");
+const { default: THREE } = require("../lib/three.module");
 
 var JOINTS = [
     "wrist",
@@ -272,15 +273,15 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
     })(),
 
     detectHandGesture: (function () {
-        var wristPosition = new THREE.Vector3();
-        var thumbTipPosition = new THREE.Vector3();
-        var middleTipPosition = new THREE.Vector3();
-        var ringTipPosition = new THREE.Vector3();
-        var pinkyTipPosition = new THREE.Vector3();
+        var wristPositionGesture = new THREE.Vector3();
+        var indexTipPositionGesture = new THREE.Vector3();
+        var thumbTipPositionGesture = new THREE.Vector3();
+        var middleTipPositionGesture = new THREE.Vector3();
+        var ringTipPositionGesture = new THREE.Vector3();
+        var pinkyTipPositionGesture = new THREE.Vector3();
 
         return function () {
             var frame = this.el.sceneEl.frame;
-            var indexTipPosition = this.indexTipPosition;
             var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
             var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
             var referenceSpace = this.referenceSpace || trackedControlsWebXR.system.referenceSpace;
@@ -307,18 +308,18 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
                 return;
             }
 
-            wristPosition.copy(wristPose.transform.position);
-            thumbTipPosition.copy(thumbTipPose.transform.position);
-            indexTipPosition.copy(indexTipPose.transform.position);
-            middleTipPosition.copy(middleTipPose.transform.position);
-            ringTipPosition.copy(ringTipPose.transform.position);
-            pinkyTipPosition.copy(pinkyTipPose.transform.position);
+            wristPositionGesture.copy(wristPose.transform.position);
+            thumbTipPositionGesture.copy(thumbTipPose.transform.position);
+            indexTipPositionGesture.copy(indexTipPose.transform.position);
+            middleTipPositionGesture.copy(middleTipPose.transform.position);
+            ringTipPositionGesture.copy(ringTipPose.transform.position);
+            pinkyTipPositionGesture.copy(pinkyTipPose.transform.position);
 
-            var thumbDistanceToWrist = thumbTipPosition.distanceTo(wristPosition);
-            var indexDistanceToWrist = indexTipPosition.distanceTo(wristPosition);
-            var middleDistanceToWrist = middleTipPosition.distanceTo(wristPosition);
-            var ringDistanceToWrist = ringTipPosition.distanceTo(wristPosition);
-            var pinkyDistanceToWrist = pinkyTipPosition.distanceTo(wristPosition);
+            var thumbDistanceToWrist = thumbTipPositionGesture.distanceTo(wristPositionGesture);
+            var indexDistanceToWrist = indexTipPositionGesture.distanceTo(wristPositionGesture);
+            var middleDistanceToWrist = middleTipPositionGesture.distanceTo(wristPositionGesture);
+            var ringDistanceToWrist = ringTipPositionGesture.distanceTo(wristPositionGesture);
+            var pinkyDistanceToWrist = pinkyTipPositionGesture.distanceTo(wristPositionGesture);
 
             var gestureCounter = 0;
 
@@ -352,7 +353,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
                 ) {
                     this.isGestureFound[gestureCounter] = true;
                     this.gestureEventDetail.gestureName = gesture.Name;
-                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
                     this.gestureEventDetail.position.y += 1.5;
                     this.gestureEventDetail.hand = this.data.hand;
                     this.el.emit("gesturestarted", this.gestureEventDetail);
@@ -375,7 +376,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
                 ) {
                     this.isGestureFound[gestureCounter] = false;
                     this.gestureEventDetail.gestureName = gesture.Name;
-                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
                     this.gestureEventDetail.position.y += 1.5;
                     this.gestureEventDetail.hand = this.data.hand;
                     this.el.emit("gestureended", this.gestureEventDetail);
@@ -384,7 +385,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
 
                 if (this.isGestureFound[gestureCounter]) {
                     this.gestureEventDetail.gestureName = gesture.Name;
-                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.copy(indexTipPositionGesture).lerp(thumbTipPositionGesture, PINCH_POSITION_INTERPOLATION);
                     this.gestureEventDetail.position.y += 1.5;
                     this.gestureEventDetail.hand = this.data.hand;
                     this.el.emit("gesturemoved", this.gestureEventDetail);
