@@ -14437,28 +14437,31 @@ var registerComponent = (__webpack_require__(/*! ../core/component */ "./src/cor
 var bind = __webpack_require__(/*! ../utils/bind */ "./src/utils/bind.js");
 var trackedControlsUtils = __webpack_require__(/*! ../utils/tracked-controls */ "./src/utils/tracked-controls.js");
 var checkControllerPresentAndSetup = trackedControlsUtils.checkControllerPresentAndSetup;
-var LEFT_HAND_MODEL_URL = 'https://cdn.aframe.io/controllers/oculus-hands/v4/left.glb';
-var RIGHT_HAND_MODEL_URL = 'https://cdn.aframe.io/controllers/oculus-hands/v4/right.glb';
-var JOINTS = ['wrist', 'thumb-metacarpal', 'thumb-phalanx-proximal', 'thumb-phalanx-distal', 'thumb-tip', 'index-finger-metacarpal', 'index-finger-phalanx-proximal', 'index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip', 'middle-finger-metacarpal', 'middle-finger-phalanx-proximal', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip', 'ring-finger-metacarpal', 'ring-finger-phalanx-proximal', 'ring-finger-phalanx-intermediate', 'ring-finger-phalanx-distal', 'ring-finger-tip', 'pinky-finger-metacarpal', 'pinky-finger-phalanx-proximal', 'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal', 'pinky-finger-tip'];
+var LEFT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/left.glb";
+var RIGHT_HAND_MODEL_URL = "https://cdn.aframe.io/controllers/oculus-hands/v4/right.glb";
+var HAND_GESTURE_DATA = __webpack_require__(/*! ../../HandGestureData_Clean.json */ "./HandGestureData_Clean.json");
+var JOINTS = ["wrist", "thumb-metacarpal", "thumb-phalanx-proximal", "thumb-phalanx-distal", "thumb-tip", "index-finger-metacarpal", "index-finger-phalanx-proximal", "index-finger-phalanx-intermediate", "index-finger-phalanx-distal", "index-finger-tip", "middle-finger-metacarpal", "middle-finger-phalanx-proximal", "middle-finger-phalanx-intermediate", "middle-finger-phalanx-distal", "middle-finger-tip", "ring-finger-metacarpal", "ring-finger-phalanx-proximal", "ring-finger-phalanx-intermediate", "ring-finger-phalanx-distal", "ring-finger-tip", "pinky-finger-metacarpal", "pinky-finger-phalanx-proximal", "pinky-finger-phalanx-intermediate", "pinky-finger-phalanx-distal", "pinky-finger-tip"];
 var PINCH_START_DISTANCE = 0.015;
 var PINCH_END_DISTANCE = 0.03;
 var PINCH_POSITION_INTERPOLATION = 0.5;
+var GESTURE_THRESHOLD_MAX = 0.03;
+var GESTURE_THRESHOLD_MIN = -0.03;
 
 /**
  * Controls for hand tracking
  */
-module.exports.Component = registerComponent('hand-tracking-controls', {
+module.exports.Component = registerComponent("hand-tracking-controls", {
   schema: {
     hand: {
-      default: 'right',
-      oneOf: ['left', 'right']
+      default: "right",
+      oneOf: ["left", "right"]
     },
     modelStyle: {
-      default: 'mesh',
-      oneOf: ['dots', 'mesh']
+      default: "mesh",
+      oneOf: ["dots", "mesh"]
     },
     modelColor: {
-      default: 'white'
+      default: "white"
     }
   },
   bindMethods: function () {
@@ -14467,36 +14470,49 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
     this.removeControllersUpdateListener = bind(this.removeControllersUpdateListener, this);
   },
   addEventListeners: function () {
-    this.el.addEventListener('model-loaded', this.onModelLoaded);
+    this.el.addEventListener("model-loaded", this.onModelLoaded);
     for (var i = 0; i < this.jointEls.length; ++i) {
       this.jointEls[i].object3D.visible = true;
     }
   },
   removeEventListeners: function () {
-    this.el.removeEventListener('model-loaded', this.onModelLoaded);
+    this.el.removeEventListener("model-loaded", this.onModelLoaded);
     for (var i = 0; i < this.jointEls.length; ++i) {
       this.jointEls[i].object3D.visible = false;
     }
   },
   init: function () {
     var sceneEl = this.el.sceneEl;
-    var webXROptionalAttributes = sceneEl.getAttribute('webxr').optionalFeatures;
-    webXROptionalAttributes.push('hand-tracking');
-    sceneEl.setAttribute('webxr', {
+    var webXROptionalAttributes = sceneEl.getAttribute("webxr").optionalFeatures;
+    webXROptionalAttributes.push("hand-tracking");
+    sceneEl.setAttribute("webxr", {
       optionalFeatures: webXROptionalAttributes
     });
     this.onModelLoaded = this.onModelLoaded.bind(this);
     this.jointEls = [];
     this.controllerPresent = false;
     this.isPinched = false;
+    this.isGestureFound = [];
     this.pinchEventDetail = {
       position: new THREE.Vector3()
+    };
+    this.gestureEventDetail = {
+      gestureName: "",
+      position: new THREE.Vector3(),
+      hand: {
+        default: "right",
+        oneOf: ["left", "right"]
+      }
     };
     this.indexTipPosition = new THREE.Vector3();
     this.bindMethods();
     this.updateReferenceSpace = this.updateReferenceSpace.bind(this);
-    this.el.sceneEl.addEventListener('enter-vr', this.updateReferenceSpace);
-    this.el.sceneEl.addEventListener('exit-vr', this.updateReferenceSpace);
+    this.el.sceneEl.addEventListener("enter-vr", this.updateReferenceSpace);
+    this.el.sceneEl.addEventListener("exit-vr", this.updateReferenceSpace);
+    this.handGesturesSource = HAND_GESTURE_DATA;
+    for (var i = 0; i < this.handGesturesSource.HandGestures.length; ++i) {
+      this.isGestureFound.push(false);
+    }
   },
   updateReferenceSpace: function () {
     var self = this;
@@ -14513,14 +14529,14 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
         z: 0
       }));
     }).catch(function (error) {
-      self.el.sceneEl.systems.webxr.warnIfFeatureNotRequested(referenceSpaceType, 'tracked-controls-webxr uses reference space ' + referenceSpaceType);
+      self.el.sceneEl.systems.webxr.warnIfFeatureNotRequested(referenceSpaceType, "tracked-controls-webxr uses reference space " + referenceSpaceType);
       throw error;
     });
   },
   checkIfControllerPresent: function () {
     var data = this.data;
     var hand = data.hand ? data.hand : undefined;
-    checkControllerPresentAndSetup(this, '', {
+    checkControllerPresentAndSetup(this, "", {
       hand: hand,
       iterateControllerProfiles: true,
       handTracking: true
@@ -14532,9 +14548,9 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
   },
   tick: function () {
     var sceneEl = this.el.sceneEl;
-    var controller = this.el.components['tracked-controls'] && this.el.components['tracked-controls'].controller;
+    var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
     var frame = sceneEl.frame;
-    var trackedControlsWebXR = this.el.components['tracked-controls-webxr'];
+    var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
     if (!controller || !frame || !trackedControlsWebXR) {
       return;
     }
@@ -14548,10 +14564,10 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
     }
   },
   updateHandModel: function () {
-    if (this.data.modelStyle === 'dots') {
+    if (this.data.modelStyle === "dots") {
       this.updateHandDotsModel();
     }
-    if (this.data.modelStyle === 'mesh') {
+    if (this.data.modelStyle === "mesh") {
       this.updateHandMeshModel();
     }
   },
@@ -14566,7 +14582,7 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
   },
   updateHandMeshModel: function () {
     var frame = this.el.sceneEl.frame;
-    var controller = this.el.components['tracked-controls'] && this.el.components['tracked-controls'].controller;
+    var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
     var referenceSpace = this.referenceSpace;
     if (!controller || !this.mesh || !referenceSpace) {
       return;
@@ -14588,8 +14604,8 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
   },
   updateHandDotsModel: function () {
     var frame = this.el.sceneEl.frame;
-    var controller = this.el.components['tracked-controls'] && this.el.components['tracked-controls'].controller;
-    var trackedControlsWebXR = this.el.components['tracked-controls-webxr'];
+    var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
+    var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
     var referenceSpace = trackedControlsWebXR.system.referenceSpace;
     var jointEl;
     var object3D;
@@ -14605,7 +14621,7 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
       }
       object3D.matrix.elements = jointPose.transform.matrix;
       object3D.matrix.decompose(object3D.position, object3D.rotation, object3D.scale);
-      jointEl.setAttribute('scale', {
+      jointEl.setAttribute("scale", {
         x: jointPose.radius,
         y: jointPose.radius,
         z: jointPose.radius
@@ -14614,17 +14630,18 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
   },
   detectGesture: function () {
     this.detectPinch();
+    this.detectHandGesture();
   },
   detectPinch: function () {
     var thumbTipPosition = new THREE.Vector3();
     return function () {
       var frame = this.el.sceneEl.frame;
       var indexTipPosition = this.indexTipPosition;
-      var controller = this.el.components['tracked-controls'] && this.el.components['tracked-controls'].controller;
-      var trackedControlsWebXR = this.el.components['tracked-controls-webxr'];
+      var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
+      var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
       var referenceSpace = this.referenceSpace || trackedControlsWebXR.system.referenceSpace;
-      var indexTip = controller.hand.get('index-finger-tip');
-      var thumbTip = controller.hand.get('thumb-tip');
+      var indexTip = controller.hand.get("index-finger-tip");
+      var thumbTip = controller.hand.get("thumb-tip");
       if (!indexTip || !thumbTip) {
         return;
       }
@@ -14640,20 +14657,111 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
         this.isPinched = true;
         this.pinchEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
         this.pinchEventDetail.position.y += 1.5;
-        this.el.emit('pinchstarted', this.pinchEventDetail);
+        this.el.emit("pinchstarted", this.pinchEventDetail);
       }
       if (distance > PINCH_END_DISTANCE && this.isPinched === true) {
         this.isPinched = false;
         this.pinchEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
         this.pinchEventDetail.position.y += 1.5;
-        this.el.emit('pinchended', this.pinchEventDetail);
+        this.el.emit("pinchended", this.pinchEventDetail);
       }
       if (this.isPinched) {
         this.pinchEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
         this.pinchEventDetail.position.y += 1.5;
-        this.el.emit('pinchmoved', this.pinchEventDetail);
+        this.el.emit("pinchmoved", this.pinchEventDetail);
       }
       indexTipPosition.y += 1.5;
+    };
+  }(),
+  detectHandGesture: function () {
+    var wristPosition = new THREE.Vector3();
+    var thumbTipPosition = new THREE.Vector3();
+    var middleTipPosition = new THREE.Vector3();
+    var ringTipPosition = new THREE.Vector3();
+    var pinkyTipPosition = new THREE.Vector3();
+    return function () {
+      var frame = this.el.sceneEl.frame;
+      var indexTipPosition = this.indexTipPosition;
+      var controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
+      var trackedControlsWebXR = this.el.components["tracked-controls-webxr"];
+      var referenceSpace = this.referenceSpace || trackedControlsWebXR.system.referenceSpace;
+      var wrist = controller.hand.get("wrist");
+      var thumbTip = controller.hand.get("thumb-tip");
+      var indexTip = controller.hand.get("index-finger-tip");
+      var middleTip = controller.hand.get("middle-finger-tip");
+      var ringTip = controller.hand.get("ring-finger-tip");
+      var pinkyTip = controller.hand.get("pinky-finger-tip");
+      if (!wrist || !thumbTip || !indexTip || !middleTip || !ringTip || !pinkyTip) {
+        return;
+      }
+      var wristPose = frame.getJointPose(wrist, referenceSpace);
+      var thumbTipPose = frame.getJointPose(thumbTip, referenceSpace);
+      var indexTipPose = frame.getJointPose(indexTip, referenceSpace);
+      var middleTipPose = frame.getJointPose(middleTip, referenceSpace);
+      var ringTipPose = frame.getJointPose(ringTip, referenceSpace);
+      var pinkyTipPose = frame.getJointPose(pinkyTip, referenceSpace);
+      if (!wristPose || !thumbTipPose || !indexTipPose || !middleTipPose || !ringTipPose || !pinkyTipPose) {
+        return;
+      }
+      wristPosition.copy(wristPose.transform.position);
+      thumbTipPosition.copy(thumbTipPose.transform.position);
+      indexTipPosition.copy(indexTipPose.transform.position);
+      middleTipPosition.copy(middleTipPose.transform.position);
+      ringTipPosition.copy(ringTipPose.transform.position);
+      pinkyTipPosition.copy(pinkyTipPose.transform.position);
+      var thumbDistanceToWrist = thumbTipPosition.distanceTo(wristPosition);
+      var indexDistanceToWrist = indexTipPosition.distanceTo(wristPosition);
+      var middleDistanceToWrist = middleTipPosition.distanceTo(wristPosition);
+      var ringDistanceToWrist = ringTipPosition.distanceTo(wristPosition);
+      var pinkyDistanceToWrist = pinkyTipPosition.distanceTo(wristPosition);
+      var gestureCounter = 0;
+
+      // get gesture values from source
+      for (const gesture of this.handGesturesSource.HandGestures) {
+        const thumbTipJoint = gesture.Joints.find(fingerTip => fingerTip.JointName == "thumb-tip");
+        const indexTipJoint = gesture.Joints.find(fingerTip => fingerTip.JointName == "index-finger-tip");
+        const middleTipJoint = gesture.Joints.find(fingerTip => fingerTip.JointName == "middle-finger-tip");
+        const ringTipJoint = gesture.Joints.find(fingerTip => fingerTip.JointName == "ring-finger-tip");
+        const pinkyTipJoint = gesture.Joints.find(fingerTip => fingerTip.JointName == "pinky-finger-tip");
+
+        // compare distances with threshold
+        const thumbDifference = thumbTipJoint.DistanceToWrist - thumbDistanceToWrist;
+        const indexDifference = indexTipJoint.DistanceToWrist - indexDistanceToWrist;
+        const middleDifference = middleTipJoint.DistanceToWrist - middleDistanceToWrist;
+        const ringDifference = ringTipJoint.DistanceToWrist - ringDistanceToWrist;
+        const pinkyDifference = pinkyTipJoint.DistanceToWrist - pinkyDistanceToWrist;
+        if (thumbDifference <= GESTURE_THRESHOLD_MAX && thumbDifference >= GESTURE_THRESHOLD_MIN && indexDifference <= GESTURE_THRESHOLD_MAX && indexDifference >= GESTURE_THRESHOLD_MIN && middleDifference <= GESTURE_THRESHOLD_MAX && middleDifference >= GESTURE_THRESHOLD_MIN && ringDifference <= GESTURE_THRESHOLD_MAX && ringDifference >= GESTURE_THRESHOLD_MIN && pinkyDifference <= GESTURE_THRESHOLD_MAX && pinkyDifference >= GESTURE_THRESHOLD_MIN && this.isGestureFound[gestureCounter] === false) {
+          this.isGestureFound[gestureCounter] = true;
+          this.gestureEventDetail.gestureName = gesture.Name;
+          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.y += 1.5;
+          this.gestureEventDetail.hand = this.data.hand;
+          this.el.emit("gesturestarted", this.gestureEventDetail);
+          // console.log("GestureStart recognized!", this.gestureEventDetail);
+          // console.log("Calculated differences:", thumbDifference, indexDifference, middleDifference, ringDifference, pinkyDifference);
+        }
+
+        if ((thumbDifference > GESTURE_THRESHOLD_MAX || thumbDifference < GESTURE_THRESHOLD_MIN || indexDifference > GESTURE_THRESHOLD_MAX || indexDifference < GESTURE_THRESHOLD_MIN || middleDifference > GESTURE_THRESHOLD_MAX || middleDifference < GESTURE_THRESHOLD_MIN || ringDifference > GESTURE_THRESHOLD_MAX || ringDifference < GESTURE_THRESHOLD_MIN || pinkyDifference > GESTURE_THRESHOLD_MAX || pinkyDifference < GESTURE_THRESHOLD_MIN) && this.isGestureFound[gestureCounter] === true) {
+          this.isGestureFound[gestureCounter] = false;
+          this.gestureEventDetail.gestureName = gesture.Name;
+          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.y += 1.5;
+          this.gestureEventDetail.hand = this.data.hand;
+          this.el.emit("gestureended", this.gestureEventDetail);
+          // console.log("GestureEnd recognized!", this.gestureEventDetail);
+        }
+
+        if (this.isGestureFound[gestureCounter]) {
+          this.gestureEventDetail.gestureName = gesture.Name;
+          this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+          this.gestureEventDetail.position.y += 1.5;
+          this.gestureEventDetail.hand = this.data.hand;
+          this.el.emit("gesturemoved", this.gestureEventDetail);
+          // console.log("GestureMoved recognized!", this.gestureEventDetail);
+        }
+
+        gestureCounter++;
+      }
     };
   }(),
   pause: function () {
@@ -14663,7 +14771,7 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
   injectTrackedControls: function () {
     var el = this.el;
     var data = this.data;
-    el.setAttribute('tracked-controls', {
+    el.setAttribute("tracked-controls", {
       hand: data.hand,
       iterateControllerProfiles: true,
       handTrackingEnabled: true
@@ -14671,30 +14779,30 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
     this.initDefaultModel();
   },
   addControllersUpdateListener: function () {
-    this.el.sceneEl.addEventListener('controllersupdated', this.onControllersUpdate, false);
+    this.el.sceneEl.addEventListener("controllersupdated", this.onControllersUpdate, false);
   },
   removeControllersUpdateListener: function () {
-    this.el.sceneEl.removeEventListener('controllersupdated', this.onControllersUpdate, false);
+    this.el.sceneEl.removeEventListener("controllersupdated", this.onControllersUpdate, false);
   },
   onControllersUpdate: function () {
     var controller;
     this.checkIfControllerPresent();
-    controller = this.el.components['tracked-controls'] && this.el.components['tracked-controls'].controller;
-    if (!this.el.getObject3D('mesh')) {
+    controller = this.el.components["tracked-controls"] && this.el.components["tracked-controls"].controller;
+    if (!this.el.getObject3D("mesh")) {
       return;
     }
     if (!controller || !controller.hand || !controller.hand[0]) {
-      this.el.getObject3D('mesh').visible = false;
+      this.el.getObject3D("mesh").visible = false;
     }
   },
   initDefaultModel: function () {
-    if (this.el.getObject3D('mesh')) {
+    if (this.el.getObject3D("mesh")) {
       return;
     }
-    if (this.data.modelStyle === 'dots') {
+    if (this.data.modelStyle === "dots") {
       this.initDotsModel();
     }
-    if (this.data.modelStyle === 'mesh') {
+    if (this.data.modelStyle === "mesh") {
       this.initMeshHandModel();
     }
   },
@@ -14704,12 +14812,12 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
       return;
     }
     for (var i = 0; i < JOINTS.length; ++i) {
-      var jointEl = this.jointEl = document.createElement('a-entity');
-      jointEl.setAttribute('geometry', {
-        primitive: 'sphere',
+      var jointEl = this.jointEl = document.createElement("a-entity");
+      jointEl.setAttribute("geometry", {
+        primitive: "sphere",
         radius: 1.0
       });
-      jointEl.setAttribute('material', {
+      jointEl.setAttribute("material", {
         color: this.data.modelColor
       });
       jointEl.object3D.visible = false;
@@ -14718,17 +14826,17 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
     }
   },
   initMeshHandModel: function () {
-    var modelURL = this.data.hand === 'left' ? LEFT_HAND_MODEL_URL : RIGHT_HAND_MODEL_URL;
-    this.el.setAttribute('gltf-model', modelURL);
+    var modelURL = this.data.hand === "left" ? LEFT_HAND_MODEL_URL : RIGHT_HAND_MODEL_URL;
+    this.el.setAttribute("gltf-model", modelURL);
   },
   onModelLoaded: function () {
-    var mesh = this.mesh = this.el.getObject3D('mesh').children[0];
-    var skinnedMesh = this.skinnedMesh = mesh.getObjectByProperty('type', 'SkinnedMesh');
+    var mesh = this.mesh = this.el.getObject3D("mesh").children[0];
+    var skinnedMesh = this.skinnedMesh = mesh.getObjectByProperty("type", "SkinnedMesh");
     if (!this.skinnedMesh) {
       return;
     }
     this.bones = skinnedMesh.skeleton.bones;
-    this.el.removeObject3D('mesh');
+    this.el.removeObject3D("mesh");
     mesh.position.set(0, 1.5, 0);
     mesh.rotation.set(0, 0, 0);
     skinnedMesh.frustumCulled = false;
@@ -14736,7 +14844,7 @@ module.exports.Component = registerComponent('hand-tracking-controls', {
       skinning: true,
       color: this.data.modelColor
     });
-    this.el.setObject3D('mesh', mesh);
+    this.el.setObject3D("mesh", mesh);
   }
 });
 
@@ -15604,10 +15712,10 @@ module.exports.Component = registerComponent('layer', {
 });
 function blitTexture(gl, texture, subImage, textureEl) {
   var xrReadFramebuffer = gl.createFramebuffer();
-  let x1offset = subImage.viewport.x;
-  let y1offset = subImage.viewport.y;
-  let x2offset = subImage.viewport.x + subImage.viewport.width;
-  let y2offset = subImage.viewport.y + subImage.viewport.height;
+  var x1offset = subImage.viewport.x;
+  var y1offset = subImage.viewport.y;
+  var x2offset = subImage.viewport.x + subImage.viewport.width;
+  var y2offset = subImage.viewport.y + subImage.viewport.height;
 
   // Update video texture.
   if (textureEl.tagName === 'VIDEO') {
@@ -18556,8 +18664,9 @@ module.exports.Component = registerComponent('oculus-touch-controls', {
  */
 function cloneMeshMaterial(object3d) {
   object3d.traverse(function (node) {
+    var newMaterial;
     if (node.type !== 'Mesh') return;
-    let newMaterial = node.material.clone();
+    newMaterial = node.material.clone();
     object3d.originalColor = node.material.color;
     node.material.dispose();
     node.material = newMaterial;
@@ -18730,9 +18839,9 @@ module.exports.Component = registerComponent('raycaster', {
 
     // Draw line.
     if (data.showLine && (data.far !== oldData.far || data.origin !== oldData.origin || data.direction !== oldData.direction || !oldData.showLine)) {
-      // Calculate unit vector for line direction. Can be multiplied via scalar to performantly
-      // adjust line length.
-      this.unitLineEndVec3.copy(data.origin).add(data.direction).normalize();
+      // Calculate unit vector for line direction. Can be multiplied via scalar and added
+      // to orign to adjust line length.
+      this.unitLineEndVec3.copy(data.direction).normalize();
       this.drawLine();
     }
     if (!data.showLine && oldData.showLine) {
@@ -18994,9 +19103,10 @@ module.exports.Component = registerComponent('raycaster', {
     }
 
     // Update the length of the line if given. `unitLineEndVec3` is the direction
-    // given by data.direction, then we apply a scalar to give it a length.
+    // given by data.direction, then we apply a scalar to give it a length and the
+    // origin point to offset it.
     this.lineData.start = data.origin;
-    this.lineData.end = endVec3.copy(this.unitLineEndVec3).multiplyScalar(length);
+    this.lineData.end = endVec3.copy(this.unitLineEndVec3).multiplyScalar(length).add(data.origin);
     this.lineData.color = data.lineColor;
     this.lineData.opacity = data.lineOpacity;
     el.setAttribute('line', this.lineData);
@@ -25681,10 +25791,10 @@ class ANode extends HTMLElement {
         }
       });
       self.hasLoaded = true;
+      self.setupMutationObserver();
       if (cb) {
         cb();
       }
-      self.setupMutationObserver();
       self.emit('loaded', undefined, false);
     });
   }
@@ -25694,7 +25804,7 @@ class ANode extends HTMLElement {
    * for attributes defined statically via observedAttributes.
    * One can assign any arbitrary components to an A-Frame entity
    * hence we can't know the list of attributes beforehand.
-   * This function setup a mutation observer to keep track of the entiy attribute changes
+   * This function setup a mutation observer to keep track of the entity attribute changes
    * in the DOM and update components accordingly.
    */
   setupMutationObserver() {
@@ -27321,6 +27431,7 @@ class AScene extends AEntity {
             vrManager.setSession(xrSession).then(function () {
               vrManager.setFoveation(rendererSystem.foveationLevel);
             });
+            self.systems.renderer.setWebXRFrameRate(xrSession);
             xrSession.addEventListener('end', self.exitVRBound);
             enterVRSuccess(resolve);
           }, function requestFail(error) {
@@ -30203,7 +30314,7 @@ __webpack_require__(/*! ./core/a-mixin */ "./src/core/a-mixin.js");
 // Extras.
 __webpack_require__(/*! ./extras/components/ */ "./src/extras/components/index.js");
 __webpack_require__(/*! ./extras/primitives/ */ "./src/extras/primitives/index.js");
-console.log('A-Frame Version: 1.4.1 (Date 2023-01-04, Commit #5183a179)');
+console.log('A-Frame Version: 1.4.1 (Date 2023-02-12, Commit #789f6553)');
 console.log('THREE Version (https://github.com/supermedium/three.js):', pkg.dependencies['super-three']);
 console.log('WebVR Polyfill Version:', pkg.dependencies['webvr-polyfill']);
 module.exports = window.AFRAME = {
@@ -32394,6 +32505,21 @@ module.exports.System = registerSystem('renderer', {
       colorOrTexture.convertSRGBToLinear();
     } else if (colorOrTexture.isTexture) {
       colorOrTexture.encoding = THREE.sRGBEncoding;
+    }
+  },
+  setWebXRFrameRate: function (xrSession) {
+    var data = this.data;
+    var rates = xrSession.supportedFrameRates;
+    if (rates && xrSession.updateTargetFrameRate) {
+      let targetRate;
+      if (rates.includes(90)) {
+        targetRate = data.highRefreshRate ? 90 : 72;
+      } else {
+        targetRate = data.highRefreshRate ? 72 : 60;
+      }
+      xrSession.updateTargetFrameRate(targetRate).catch(function (error) {
+        console.warn('failed to set target frame rate of ' + targetRate + '. Error info: ' + error);
+      });
     }
   }
 });
@@ -45529,6 +45655,17 @@ class WorkerPool {
 
 /***/ }),
 
+/***/ "./HandGestureData_Clean.json":
+/*!************************************!*\
+  !*** ./HandGestureData_Clean.json ***!
+  \************************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = JSON.parse('{"HandGestures":[{"Name":"ThumbsUp","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.15610305578125486},{"JointName":"index-finger-tip","DistanceToWrist":0.06458578413736982},{"JointName":"middle-finger-tip","DistanceToWrist":0.05039879883987908},{"JointName":"ring-finger-tip","DistanceToWrist":0.0447149291162674},{"JointName":"pinky-finger-tip","DistanceToWrist":0.048261905988940534}]},{"Name":"Shaka","Joints":[{"JointName":"wrist","DistanceToWrist":0},{"JointName":"thumb-tip","DistanceToWrist":0.1576174921162388},{"JointName":"index-finger-tip","DistanceToWrist":0.06251908203230849},{"JointName":"middle-finger-tip","DistanceToWrist":0.05151737883938523},{"JointName":"ring-finger-tip","DistanceToWrist":0.04564965223005979},{"JointName":"pinky-finger-tip","DistanceToWrist":0.12910303092600894}]},{"Name":"Grip","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.09926554170527346},{"JointName":"index-finger-tip","DistanceToWrist":0.06759805305823541},{"JointName":"middle-finger-tip","DistanceToWrist":0.05447908241593247},{"JointName":"ring-finger-tip","DistanceToWrist":0.047256073060042425},{"JointName":"pinky-finger-tip","DistanceToWrist":0.04326761454181316}]},{"Name":"Rock","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.09331622793428418},{"JointName":"index-finger-tip","DistanceToWrist":0.1579886432197532},{"JointName":"middle-finger-tip","DistanceToWrist":0.08835068245253815},{"JointName":"ring-finger-tip","DistanceToWrist":0.07916807202220207},{"JointName":"pinky-finger-tip","DistanceToWrist":0.1378112313441627}]},{"Name":"Fox","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.15681583793152157},{"JointName":"index-finger-tip","DistanceToWrist":0.19728253027803744},{"JointName":"middle-finger-tip","DistanceToWrist":0.1517050638819839},{"JointName":"ring-finger-tip","DistanceToWrist":0.12318947766410071},{"JointName":"pinky-finger-tip","DistanceToWrist":0.17921880825980124}]},{"Name":"One","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.09350457984507975},{"JointName":"index-finger-tip","DistanceToWrist":0.15944926798705475},{"JointName":"middle-finger-tip","DistanceToWrist":0.08125988916394987},{"JointName":"ring-finger-tip","DistanceToWrist":0.05167700091691485},{"JointName":"pinky-finger-tip","DistanceToWrist":0.05132573615825697}]},{"Name":"Two","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.0932023163017388},{"JointName":"index-finger-tip","DistanceToWrist":0.16346171533536802},{"JointName":"middle-finger-tip","DistanceToWrist":0.18473227145747181},{"JointName":"ring-finger-tip","DistanceToWrist":0.07615788148459311},{"JointName":"pinky-finger-tip","DistanceToWrist":0.06523797262226516}]},{"Name":"Three","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.10446015829428631},{"JointName":"index-finger-tip","DistanceToWrist":0.1636178504582776},{"JointName":"middle-finger-tip","DistanceToWrist":0.18631039999592294},{"JointName":"ring-finger-tip","DistanceToWrist":0.1615613977850751},{"JointName":"pinky-finger-tip","DistanceToWrist":0.0909363790465098}]},{"Name":"Four","Joints":[{"JointName":"thumb-tip","DistanceToWrist":0.1046910014665736},{"JointName":"index-finger-tip","DistanceToWrist":0.16361287785788037},{"JointName":"middle-finger-tip","DistanceToWrist":0.18636883104447102},{"JointName":"ring-finger-tip","DistanceToWrist":0.16247111137838582},{"JointName":"pinky-finger-tip","DistanceToWrist":0.1439814514561536}]}]}');
+
+/***/ }),
+
 /***/ "./package.json":
 /*!**********************!*\
   !*** ./package.json ***!
@@ -45536,7 +45673,7 @@ class WorkerPool {
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"aframe","version":"1.4.1","description":"A web framework for building virtual reality experiences.","homepage":"https://aframe.io/","main":"dist/aframe-master.js","scripts":{"dev":"cross-env INSPECTOR_VERSION=dev webpack serve --port 8080","dist":"node scripts/updateVersionLog.js && npm run dist:min && npm run dist:max","dist:max":"webpack --config webpack.config.js","dist:min":"webpack --config webpack.prod.config.js","docs":"markserv --dir docs --port 9001","preghpages":"node ./scripts/preghpages.js","ghpages":"ghpages -p gh-pages/","lint":"semistandard -v | snazzy","lint:fix":"semistandard --fix","precommit":"npm run lint","prepush":"node scripts/testOnlyCheck.js","prerelease":"node scripts/release.js 1.3.0 1.4.0","start":"npm run dev","start:https":"npm run dev -- --server-type https","test":"karma start ./tests/karma.conf.js","test:docs":"node scripts/docsLint.js","test:firefox":"npm test -- --browsers Firefox","test:chrome":"npm test -- --browsers Chrome","test:nobrowser":"NO_BROWSER=true npm test","test:node":"mocha --ui tdd tests/node"},"repository":"aframevr/aframe","license":"MIT","files":["dist/*","docs/**/*","src/**/*","vendor/**/*"],"dependencies":{"buffer":"^6.0.3","custom-event-polyfill":"^1.0.6","debug":"ngokevin/debug#noTimestamp","deep-assign":"^2.0.0","@ungap/custom-elements":"^1.1.0","load-bmfont":"^1.2.3","object-assign":"^4.0.1","present":"0.0.6","promise-polyfill":"^3.1.0","super-animejs":"^3.1.0","super-three":"^0.147.1","three-bmfont-text":"dmarcos/three-bmfont-text#21d017046216e318362c48abd1a48bddfb6e0733","webvr-polyfill":"^0.10.12"},"devDependencies":{"@babel/core":"^7.17.10","babel-loader":"^8.2.5","babel-plugin-istanbul":"^6.1.1","chai":"^4.3.6","chai-shallow-deep-equal":"^1.4.0","chalk":"^1.1.3","cross-env":"^7.0.3","css-loader":"^6.7.1","ghpages":"0.0.8","git-rev":"^0.2.1","glob":"^8.0.3","husky":"^0.11.7","jsdom":"^20.0.0","karma":"^6.4.0","karma-chai-shallow-deep-equal":"0.0.4","karma-chrome-launcher":"^3.1.1","karma-coverage":"^2.2.0","karma-env-preprocessor":"^0.1.1","karma-firefox-launcher":"^2.1.2","karma-mocha":"^2.0.1","karma-mocha-reporter":"^2.2.5","karma-sinon-chai":"^2.0.2","karma-webpack":"^5.0.0","markserv":"github:sukima/markserv#feature/fix-broken-websoketio-link","mocha":"^10.0.0","replace-in-file":"^2.5.3","semistandard":"^9.0.0","shelljs":"^0.7.7","shx":"^0.2.2","sinon":"<12.0.0","sinon-chai":"^3.7.0","snazzy":"^5.0.0","style-loader":"^3.3.1","too-wordy":"ngokevin/too-wordy","webpack":"^5.73.0","webpack-cli":"^4.10.0","webpack-dev-server":"^4.11.0","webpack-merge":"^5.8.0","write-good":"^1.0.8"},"link":true,"semistandard":{"ignore":["build/**","dist/**","examples/**/shaders/*.js","**/vendor/**"]},"keywords":["3d","aframe","cardboard","components","oculus","three","three.js","rift","vive","vr","web-components","webvr"],"engines":{"node":">= 4.6.0","npm":">= 2.15.9"}}');
+module.exports = JSON.parse('{"name":"aframe","version":"1.4.1","description":"A web framework for building virtual reality experiences.","homepage":"https://aframe.io/","main":"dist/aframe-master.js","scripts":{"dev":"cross-env INSPECTOR_VERSION=dev webpack serve --port 8080","dist":"node scripts/updateVersionLog.js && npm run dist:min && npm run dist:max","dist:max":"webpack --config webpack.config.js","dist:min":"webpack --config webpack.prod.config.js","docs":"markserv --dir docs --port 9001","preghpages":"node ./scripts/preghpages.js","ghpages":"ghpages -p gh-pages/","lint":"semistandard -v | snazzy","lint:fix":"semistandard --fix","precommit":"npm run lint","prepush":"node scripts/testOnlyCheck.js","prerelease":"node scripts/release.js 1.4.0 1.4.1","start":"npm run dev","start:https":"npm run dev -- --server-type https","test":"karma start ./tests/karma.conf.js","test:docs":"node scripts/docsLint.js","test:firefox":"npm test -- --browsers Firefox","test:chrome":"npm test -- --browsers Chrome","test:nobrowser":"NO_BROWSER=true npm test","test:node":"mocha --ui tdd tests/node"},"repository":"aframevr/aframe","license":"MIT","files":["dist/*","docs/**/*","src/**/*","vendor/**/*"],"dependencies":{"buffer":"^6.0.3","custom-event-polyfill":"^1.0.6","debug":"ngokevin/debug#noTimestamp","deep-assign":"^2.0.0","@ungap/custom-elements":"^1.1.0","load-bmfont":"^1.2.3","object-assign":"^4.0.1","present":"0.0.6","promise-polyfill":"^3.1.0","super-animejs":"^3.1.0","super-three":"^0.147.1","three-bmfont-text":"dmarcos/three-bmfont-text#21d017046216e318362c48abd1a48bddfb6e0733","webvr-polyfill":"^0.10.12"},"devDependencies":{"@babel/core":"^7.17.10","babel-loader":"^8.2.5","babel-plugin-istanbul":"^6.1.1","chai":"^4.3.6","chai-shallow-deep-equal":"^1.4.0","chalk":"^1.1.3","cross-env":"^7.0.3","css-loader":"^6.7.1","ghpages":"0.0.8","git-rev":"^0.2.1","glob":"^8.0.3","husky":"^0.11.7","jsdom":"^20.0.0","karma":"^6.4.0","karma-chai-shallow-deep-equal":"0.0.4","karma-chrome-launcher":"^3.1.1","karma-coverage":"^2.2.0","karma-env-preprocessor":"^0.1.1","karma-firefox-launcher":"^2.1.2","karma-mocha":"^2.0.1","karma-mocha-reporter":"^2.2.5","karma-sinon-chai":"^2.0.2","karma-webpack":"^5.0.0","markserv":"github:sukima/markserv#feature/fix-broken-websoketio-link","mocha":"^10.0.0","replace-in-file":"^2.5.3","semistandard":"^9.0.0","shelljs":"^0.7.7","shx":"^0.2.2","sinon":"<12.0.0","sinon-chai":"^3.7.0","snazzy":"^5.0.0","style-loader":"^3.3.1","too-wordy":"ngokevin/too-wordy","webpack":"^5.73.0","webpack-cli":"^4.10.0","webpack-dev-server":"^4.11.0","webpack-merge":"^5.8.0","write-good":"^1.0.8"},"link":true,"semistandard":{"ignore":["build/**","dist/**","examples/**/shaders/*.js","**/vendor/**"]},"keywords":["3d","aframe","cardboard","components","oculus","three","three.js","rift","vive","vr","quest","meta","web-components","webvr","webxr"],"engines":{"node":">= 4.6.0","npm":">= 2.15.9"}}');
 
 /***/ })
 
