@@ -1,26 +1,39 @@
 /* global AFRAME */
-AFRAME.registerComponent('color-change', {
-  schema: {
-    color: { default: 'green' }
-  },
+AFRAME.registerComponent("color-change", {
+    schema: {
+        color: { default: "green" },
+    },
 
-  init: function () {
-    this.bindMethods();
-    this.el.addEventListener('pinchedstarted', this.onPinchedStarted);
-    this.el.addEventListener('pinchedended', this.onPinchedEnded);
-  },
+    init: function () {
+        this.bindMethods();
+        this.el.addEventListener("pinchedstarted", this.onPinchedStarted);
+        this.el.addEventListener("pinchedended", this.onPinchedEnded);
+        this.el.addEventListener("grabbedstarted", this.onGrabbedStarted);
+        this.el.addEventListener("grabbedended", this.onGrabbedEnded);
+    },
 
-  bindMethods: function () {
-    this.onPinchedStarted = this.onPinchedStarted.bind(this);
-    this.onPinchedEnded = this.onPinchedEnded.bind(this);
-  },
+    bindMethods: function () {
+        this.onPinchedStarted = this.onPinchedStarted.bind(this);
+        this.onPinchedEnded = this.onPinchedEnded.bind(this);
+        this.onGrabbedStarted = this.onGrabbedStarted.bind(this);
+        this.onGrabbedEnded = this.onGrabbedEnded.bind(this);
+    },
 
-  onPinchedStarted: function () {
-    this.originalColor = this.originalColor || this.el.getAttribute('material').color;
-    this.el.setAttribute('material', 'color', this.data.color);
-  },
+    onPinchedStarted: function () {
+        this.originalColor = this.originalColor || this.el.getAttribute("material").color;
+        this.el.setAttribute("material", "color", this.data.color);
+    },
 
-  onPinchedEnded: function () {
-    this.el.setAttribute('material', 'color', this.originalColor);
-  }
+    onGrabbedStarted: function () {
+        this.originalColor = this.originalColor || this.el.getAttribute("material").color;
+        this.el.setAttribute("material", "color", this.data.color);
+    },
+
+    onPinchedEnded: function () {
+        this.el.setAttribute("material", "color", this.originalColor);
+    },
+
+    onGrabbedEnded: function () {
+        this.el.setAttribute("material", "color", this.originalColor);
+    },
 });

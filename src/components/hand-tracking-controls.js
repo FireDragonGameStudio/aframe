@@ -83,9 +83,9 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
         this.jointEls = [];
         this.controllerPresent = false;
         this.isPinched = false;
-        this.isGestureFound = false;
+        this.isGestureFound = [];
         this.pinchEventDetail = { position: new THREE.Vector3() };
-        this.gestureEventDetail = { gestureName: "" };
+        this.gestureEventDetail = { gestureName: "", position: new THREE.Vector3(), hand: { default: "right", oneOf: ["left", "right"] } };
         this.indexTipPosition = new THREE.Vector3();
 
         this.bindMethods();
@@ -95,6 +95,10 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
         this.el.sceneEl.addEventListener("exit-vr", this.updateReferenceSpace);
 
         this.handGesturesSource = HAND_GESTURE_DATA;
+
+        for (var i = 0; i < this.handGesturesSource.HandGestures.length; ++i) {
+            this.isGestureFound.push(false);
+        }
     },
 
     updateReferenceSpace: function () {
@@ -215,7 +219,7 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
 
     detectGesture: function () {
         this.detectPinch();
-        this.detectGrip();
+        this.detectHandGesture();
     },
 
     detectPinch: (function () {
@@ -267,12 +271,13 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
         };
     })(),
 
-    detectGrip: (function () {
+    detectHandGesture: (function () {
         var wristPosition = new THREE.Vector3();
         var thumbTipPosition = new THREE.Vector3();
         var middleTipPosition = new THREE.Vector3();
         var ringTipPosition = new THREE.Vector3();
         var pinkyTipPosition = new THREE.Vector3();
+
         return function () {
             var frame = this.el.sceneEl.frame;
             var indexTipPosition = this.indexTipPosition;
@@ -315,7 +320,9 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
             var ringDistanceToWrist = ringTipPosition.distanceTo(wristPosition);
             var pinkyDistanceToWrist = pinkyTipPosition.distanceTo(wristPosition);
 
-            // get grip gesture values from source
+            var gestureCounter = 0;
+
+            // get gesture values from source
             for (const gesture of this.handGesturesSource.HandGestures) {
                 const thumbTipJoint = gesture.Joints.find((fingerTip) => fingerTip.JointName == "thumb-tip");
                 const indexTipJoint = gesture.Joints.find((fingerTip) => fingerTip.JointName == "index-finger-tip");
@@ -341,12 +348,15 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
                     ringDifference >= GESTURE_THRESHOLD_MIN &&
                     pinkyDifference <= GESTURE_THRESHOLD_MAX &&
                     pinkyDifference >= GESTURE_THRESHOLD_MIN &&
-                    this.isGestureFound === false
+                    this.isGestureFound[gestureCounter] === false
                 ) {
-                    this.isGestureFound = true;
+                    this.isGestureFound[gestureCounter] = true;
                     this.gestureEventDetail.gestureName = gesture.Name;
-                    this.el.emit("gestureFound", this.gestureEventDetail);
-                    console.log("GestureStart recognized!");
+                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.y += 1.5;
+                    this.gestureEventDetail.hand = this.data.hand;
+                    this.el.emit("gesturestarted", this.gestureEventDetail);
+                    // console.log("GestureStart recognized!", this.gestureEventDetail);
                     // console.log("Calculated differences:", thumbDifference, indexDifference, middleDifference, ringDifference, pinkyDifference);
                 }
 
@@ -361,20 +371,27 @@ module.exports.Component = registerComponent("hand-tracking-controls", {
                         ringDifference < GESTURE_THRESHOLD_MIN ||
                         pinkyDifference > GESTURE_THRESHOLD_MAX ||
                         pinkyDifference < GESTURE_THRESHOLD_MIN) &&
-                    this.isGestureFound === true
+                    this.isGestureFound[gestureCounter] === true
                 ) {
-                    this.isGestureFound = false;
+                    this.isGestureFound[gestureCounter] = false;
                     this.gestureEventDetail.gestureName = gesture.Name;
+                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.y += 1.5;
+                    this.gestureEventDetail.hand = this.data.hand;
                     this.el.emit("gestureended", this.gestureEventDetail);
-                    console.log("GestureEnd recognized!");
-                    // console.log("Calculated differences:", thumbDifference, indexDifference, middleDifference, ringDifference, pinkyDifference);
+                    // console.log("GestureEnd recognized!", this.gestureEventDetail);
                 }
 
-                if (this.isGestureFound) {
+                if (this.isGestureFound[gestureCounter]) {
                     this.gestureEventDetail.gestureName = gesture.Name;
+                    this.gestureEventDetail.position.copy(indexTipPosition).lerp(thumbTipPosition, PINCH_POSITION_INTERPOLATION);
+                    this.gestureEventDetail.position.y += 1.5;
+                    this.gestureEventDetail.hand = this.data.hand;
                     this.el.emit("gesturemoved", this.gestureEventDetail);
-                    // console.log("GripGestureMove recognized!");
+                    // console.log("GestureMoved recognized!", this.gestureEventDetail);
                 }
+
+                gestureCounter++;
             }
         };
     })(),

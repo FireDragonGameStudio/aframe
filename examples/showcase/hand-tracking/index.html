@@ -15,12 +15,15 @@
         <script src="menu.js"></script>
         <script src="pressable.js"></script>
         <script src="event-manager.js"></script>
+        <script src="gesture-color-change.js"></script>
     </head>
     <body>
-        <a-scene environment info-message="htmlSrc: #messageText">
+        <a-scene environment info-message="htmlSrc: #messageText" gesture-color-change>
             <a-assets>
                 <a-asset-item id="messageText" src="message.html"></a-asset-item>
             </a-assets>
+            <a-cylinder id="cylinderLeft" position="-1 2 -1" radius="0.5" height="1.5" color="#FFFFFF" scale="0.3 0.3 0.3"></a-cylinder>
+            <a-cylinder id="cylinderRight" position="1 2 -1" radius="0.5" height="1.5" color="#FFFFFF" scale="0.3 0.3 0.3"></a-cylinder>
             <a-entity id="boxGeometry" position="0 2.0 -1" rotation="45 45 0" geometry="primitive: box; height: 0.6; width: 0.6; depth: 0.6" material="color: #ff4b5c" size-change scale="0.5 0.5 0.5"></a-entity>
             <a-entity id="torusGeometry" position="0 2.0 -1" rotation="45 45 0" geometry="primitive: torus; radius: 0.4; radius-tubular: 0.06" material="color: #d2e603" size-change visible="false" scale="0.5 0.5 0.5"></a-entity>
             <a-entity id="sphereGeometry" position="0 2.0 -1" rotation="45 45 0" geometry="primitive: sphere; radius: 0.6;" material="color: #fcdab7" size-change visible="false" scale="0.5 0.5 0.5"></a-entity>
